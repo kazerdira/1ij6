@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
 Cache Manager with Redis
-Cache translations to avoid redundant processing
+SECURE VERSION - Uses JSON instead of pickle (no RCE risk)
 WITH CIRCUIT BREAKER PROTECTION
 """
 
 import hashlib
 import json
-import pickle
 from typing import Optional, Any
 import logging
 import os
@@ -26,8 +25,29 @@ except ImportError:
 from reliability.circuit_breaker import CircuitBreaker
 
 
+class SecureJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder for complex types"""
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            return {"__type__": "bytes", "data": obj.hex()}
+        if hasattr(obj, 'tolist'):  # numpy arrays
+            return {"__type__": "numpy", "data": obj.tolist()}
+        return super().default(obj)
+
+
+def secure_json_decoder(dct):
+    """Custom JSON decoder"""
+    if "__type__" in dct:
+        if dct["__type__"] == "bytes":
+            return bytes.fromhex(dct["data"])
+        if dct["__type__"] == "numpy":
+            import numpy as np
+            return np.array(dct["data"])
+    return dct
+
+
 class CacheManager:
-    """Redis-based cache manager for translations WITH CIRCUIT BREAKER"""
+    """Redis-based cache manager - SECURE VERSION with JSON serialization"""
     
     def __init__(
         self,
@@ -70,7 +90,7 @@ class CacheManager:
                 port=port,
                 db=db,
                 password=password,
-                decode_responses=False,
+                decode_responses=True,  # Decode to strings for JSON
                 socket_timeout=5,
                 socket_connect_timeout=5,
                 retry_on_timeout=True,
@@ -80,7 +100,7 @@ class CacheManager:
             # Test connection
             self.redis_client.ping()
             self.enabled = True
-            logger.info(f"Cache manager connected to Redis at {host}:{port}")
+            logger.info(f"✅ Secure cache manager connected to Redis at {host}:{port}")
         
         except Exception as e:
             logger.warning(f"Failed to connect to Redis: {e}. Caching disabled.")
@@ -102,14 +122,14 @@ class CacheManager:
         if isinstance(data, str):
             data_str = data
         else:
-            data_str = json.dumps(data, sort_keys=True)
+            data_str = json.dumps(data, sort_keys=True, cls=SecureJSONEncoder)
         
         hash_hex = hashlib.sha256(data_str.encode()).hexdigest()[:16]
         return f"{prefix}:{hash_hex}"
     
     def get(self, key: str) -> Optional[Any]:
         """
-        Get value from cache WITH CIRCUIT BREAKER
+        Get value from cache - SECURE with JSON
         """
         if not self.enabled:
             self.misses += 1
@@ -123,12 +143,16 @@ class CacheManager:
                     self.misses += 1
                     return None
                 
-                # Deserialize
-                deserialized = pickle.loads(value)
-                self.hits += 1
-                
-                logger.debug(f"Cache HIT: {key}")
-                return deserialized
+                # Deserialize from JSON (SECURE - no RCE risk)
+                try:
+                    deserialized = json.loads(value, object_hook=secure_json_decoder)
+                    self.hits += 1
+                    logger.debug(f"Cache HIT: {key}")
+                    return deserialized
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to deserialize cache value: {e}")
+                    self.misses += 1
+                    return None
         
         except Exception as e:
             logger.error(f"Cache get error for key {key}: {e}")
@@ -137,15 +161,19 @@ class CacheManager:
     
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
         """
-        Set value in cache WITH CIRCUIT BREAKER
+        Set value in cache - SECURE with JSON
         """
         if not self.enabled:
             return
         
         try:
             with self.redis_breaker:
-                # Serialize
-                serialized = pickle.dumps(value)
+                # Serialize to JSON (SECURE - no RCE risk)
+                try:
+                    serialized = json.dumps(value, cls=SecureJSONEncoder)
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Failed to serialize value for caching: {e}")
+                    return
                 
                 # Set with TTL
                 ttl = ttl or self.default_ttl
@@ -170,7 +198,7 @@ class CacheManager:
     
     def clear_pattern(self, pattern: str):
         """
-        Clear all keys matching pattern
+        Clear all keys matching pattern (using scan_iter for safety)
         
         Args:
             pattern: Redis key pattern (e.g., "translation:*")
@@ -179,7 +207,7 @@ class CacheManager:
             return
         
         try:
-            keys = self.redis_client.keys(pattern)
+            keys = list(self.redis_client.scan_iter(pattern))  # Safe for large datasets
             if keys:
                 self.redis_client.delete(*keys)
                 logger.info(f"Cleared {len(keys)} keys matching pattern: {pattern}")
@@ -207,7 +235,8 @@ class CacheManager:
             'hits': self.hits,
             'misses': self.misses,
             'sets': self.sets,
-            'hit_rate': round(hit_rate, 2)
+            'hit_rate': round(hit_rate, 2),
+            'serialization': 'JSON (secure)'  # Indicate secure serialization
         }
         
         if self.enabled:

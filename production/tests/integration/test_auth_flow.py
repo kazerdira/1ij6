@@ -59,12 +59,10 @@ class TestJWTAuthentication:
     @pytest.mark.integration
     def test_jwt_token_creation(self):
         """JWT tokens should be creatable"""
-        from security.auth import AuthManager
+        from security.auth import JWTManager
         
-        manager = AuthManager()
-        
-        # Create token
-        token = manager.create_access_token(
+        # Create token using JWTManager
+        token = JWTManager.create_access_token(
             data={"user_id": "test_user", "tier": "pro"}
         )
         
@@ -75,10 +73,9 @@ class TestJWTAuthentication:
     @pytest.mark.integration
     def test_jwt_token_has_three_parts(self):
         """JWT tokens should have header.payload.signature format"""
-        from security.auth import AuthManager
+        from security.auth import JWTManager
         
-        manager = AuthManager()
-        token = manager.create_access_token(data={"user_id": "test"})
+        token = JWTManager.create_access_token(data={"user_id": "test"})
         
         parts = token.split(".")
         assert len(parts) == 3
@@ -86,15 +83,13 @@ class TestJWTAuthentication:
     @pytest.mark.integration
     def test_jwt_token_decoding(self):
         """JWT tokens should be decodable"""
-        from security.auth import AuthManager
-        
-        manager = AuthManager()
+        from security.auth import JWTManager
         
         original_data = {"user_id": "test_user_123", "tier": "enterprise"}
-        token = manager.create_access_token(data=original_data)
+        token = JWTManager.create_access_token(data=original_data)
         
-        # Decode
-        decoded = manager.decode_access_token(token)
+        # Decode using verify_token
+        decoded = JWTManager.verify_token(token)
         
         assert decoded is not None
         assert decoded.get("user_id") == "test_user_123"
@@ -103,26 +98,22 @@ class TestJWTAuthentication:
     @pytest.mark.integration
     def test_jwt_invalid_token_rejected(self):
         """Invalid JWT tokens should be rejected"""
-        from security.auth import AuthManager
+        from security.auth import JWTManager
         
-        manager = AuthManager()
-        
-        result = manager.decode_access_token("invalid.token.here")
+        result = JWTManager.verify_token("invalid.token.here")
         assert result is None
     
     @pytest.mark.integration
     def test_jwt_tampered_token_rejected(self):
         """Tampered JWT tokens should be rejected"""
-        from security.auth import AuthManager
+        from security.auth import JWTManager
         
-        manager = AuthManager()
-        
-        token = manager.create_access_token(data={"user_id": "test"})
+        token = JWTManager.create_access_token(data={"user_id": "test"})
         
         # Tamper with token
         tampered = token[:-5] + "XXXXX"
         
-        result = manager.decode_access_token(tampered)
+        result = JWTManager.verify_token(tampered)
         assert result is None
 
 
@@ -171,4 +162,4 @@ class TestAuthManager:
         
         assert manager is not None
         assert hasattr(manager, 'verify_request')
-        assert hasattr(manager, 'create_access_token')
+        assert hasattr(manager, 'verify_admin')

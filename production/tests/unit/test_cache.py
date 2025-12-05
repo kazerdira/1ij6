@@ -5,13 +5,14 @@ Unit Tests: Cache Manager
 
 Tests for scalability/cache_manager.py
 These tests verify caching logic and Redis interactions.
+Now using JSON serialization (secure, no pickle).
 """
 
 import pytest
 import sys
 import os
+import json
 from unittest.mock import MagicMock, patch
-import pickle
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -68,16 +69,16 @@ class TestCacheOperations:
     
     @pytest.mark.unit
     def test_get_with_mock_redis(self, mock_redis):
-        """get() should deserialize cached value"""
+        """get() should deserialize cached value (JSON)"""
         from scalability.cache_manager import CacheManager
         
         manager = CacheManager()
         manager.redis_client = mock_redis
         manager.enabled = True
         
-        # Mock Redis returning pickled data
+        # Mock Redis returning JSON data (not pickle anymore)
         test_value = {"text": "Hello", "translation": "Bonjour"}
-        mock_redis.get.return_value = pickle.dumps(test_value)
+        mock_redis.get.return_value = json.dumps(test_value)
         
         result = manager.get("test_key")
         

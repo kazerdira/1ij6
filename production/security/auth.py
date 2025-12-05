@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Authentication and Authorization System
+SECURE VERSION - API keys hashed with bcrypt
 Supports API keys and JWT tokens
 """
 
@@ -8,12 +9,20 @@ from fastapi import Security, HTTPException, status
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Dict
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
 import redis
 from functools import wraps
 import os
+
+# Try to import bcrypt
+try:
+    import bcrypt
+    BCRYPT_AVAILABLE = True
+except ImportError:
+    BCRYPT_AVAILABLE = False
+    print("⚠️  bcrypt not installed. Install with: pip install bcrypt")
 
 # Configuration
 # Security: Generate unique key per instance if not set (logged warning)
@@ -47,79 +56,193 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def hash_api_key(api_key: str) -> str:
+    """
+    Hash API key using bcrypt (SECURE)
+    
+    Args:
+        api_key: Plain API key
+    
+    Returns:
+        Bcrypt hash
+    """
+    if not BCRYPT_AVAILABLE:
+        raise RuntimeError("bcrypt not installed")
+    return bcrypt.hashpw(api_key.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_api_key_hash(api_key: str, hashed: str) -> bool:
+    """
+    Verify API key against hash
+    
+    Args:
+        api_key: Plain API key
+        hashed: Bcrypt hash
+    
+    Returns:
+        True if match
+    """
+    if not BCRYPT_AVAILABLE:
+        return False
+    try:
+        return bcrypt.checkpw(api_key.encode(), hashed.encode())
+    except Exception:
+        return False
+
+
 class APIKeyManager:
-    """Manage API keys"""
+    """Manage API keys - SECURE VERSION with bcrypt hashing"""
     
     @staticmethod
     def generate_api_key(user_id: str, tier: str = "free") -> str:
-        """Generate a new API key"""
+        """
+        Generate a new API key
+        
+        Returns the PLAIN key (user sees this once)
+        Stores HASHED version in Redis
+        """
         if not REDIS_AVAILABLE:
             raise HTTPException(status_code=503, detail="Redis not available")
-            
-        key = f"tr_{secrets.token_urlsafe(32)}"
         
-        # Store in Redis with metadata
+        if not BCRYPT_AVAILABLE:
+            raise HTTPException(status_code=503, detail="bcrypt not available")
+        
+        # Generate plain key
+        plain_key = f"tr_{secrets.token_urlsafe(32)}"
+        
+        # Hash it
+        hashed_key = hash_api_key(plain_key)
+        
+        # Create lookup index: hash of first 16 chars for fast lookup
+        key_prefix = hashlib.sha256(plain_key[:16].encode()).hexdigest()[:16]
+        
+        # Store metadata with HASHED key
         key_data = {
             "user_id": user_id,
             "tier": tier,
-            "created_at": datetime.now().isoformat(),
+            "hashed_key": hashed_key,
+            "key_prefix": key_prefix,
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "requests_today": 0,
-            "total_requests": 0
+            "total_requests": 0,
+            "last_rotated": datetime.now(timezone.utc).isoformat()
         }
         
-        redis_client.hset(f"api_key:{key}", mapping=key_data)
-        redis_client.sadd(f"user_keys:{user_id}", key)
+        # Store by prefix for lookup
+        redis_client.hset(f"api_key_meta:{key_prefix}", mapping=key_data)
         
-        return key
+        # Add to user's key list (store prefix only)
+        redis_client.sadd(f"user_keys:{user_id}", key_prefix)
+        
+        # Return PLAIN key (user sees this once and must save it)
+        return plain_key
     
     @staticmethod
     def validate_api_key(api_key: str) -> Optional[Dict]:
-        """Validate API key and return user data"""
-        if not REDIS_AVAILABLE:
-            return None
-            
-        if not api_key or not api_key.startswith("tr_"):
+        """
+        Validate API key - SECURE VERSION
+        
+        1. Extract prefix from plain key
+        2. Look up metadata by prefix
+        3. Verify against bcrypt hash
+        """
+        if not REDIS_AVAILABLE or not api_key or not api_key.startswith("tr_"):
             return None
         
-        key_data = redis_client.hgetall(f"api_key:{api_key}")
+        # Get key prefix for lookup
+        key_prefix = hashlib.sha256(api_key[:16].encode()).hexdigest()[:16]
+        
+        # Get metadata
+        key_data = redis_client.hgetall(f"api_key_meta:{key_prefix}")
         
         if not key_data:
             return None
         
-        # Increment usage counter
-        redis_client.hincrby(f"api_key:{api_key}", "requests_today", 1)
-        redis_client.hincrby(f"api_key:{api_key}", "total_requests", 1)
+        # Verify hash
+        stored_hash = key_data.get("hashed_key")
+        if not stored_hash or not verify_api_key_hash(api_key, stored_hash):
+            return None
+        
+        # Increment usage
+        redis_client.hincrby(f"api_key_meta:{key_prefix}", "requests_today", 1)
+        redis_client.hincrby(f"api_key_meta:{key_prefix}", "total_requests", 1)
+        redis_client.hset(f"api_key_meta:{key_prefix}", "last_used", datetime.now(timezone.utc).isoformat())
         
         return key_data
+    
+    @staticmethod
+    def rotate_api_key(old_api_key: str) -> str:
+        """
+        Rotate API key (generate new, invalidate old)
+        
+        Returns new plain key
+        """
+        if not REDIS_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Redis not available")
+        
+        # Validate old key
+        old_key_data = APIKeyManager.validate_api_key(old_api_key)
+        if not old_key_data:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        user_id = old_key_data.get("user_id")
+        tier = old_key_data.get("tier")
+        
+        # Generate new key
+        new_key = APIKeyManager.generate_api_key(user_id, tier)
+        
+        # Revoke old key
+        old_prefix = hashlib.sha256(old_api_key[:16].encode()).hexdigest()[:16]
+        redis_client.delete(f"api_key_meta:{old_prefix}")
+        redis_client.srem(f"user_keys:{user_id}", old_prefix)
+        
+        return new_key
     
     @staticmethod
     def revoke_api_key(api_key: str) -> bool:
         """Revoke an API key"""
         if not REDIS_AVAILABLE:
             return False
-            
-        key_data = redis_client.hgetall(f"api_key:{api_key}")
+        
+        key_prefix = hashlib.sha256(api_key[:16].encode()).hexdigest()[:16]
+        key_data = redis_client.hgetall(f"api_key_meta:{key_prefix}")
         
         if not key_data:
             return False
         
         user_id = key_data.get("user_id")
         
-        redis_client.delete(f"api_key:{api_key}")
-        redis_client.srem(f"user_keys:{user_id}", api_key)
+        redis_client.delete(f"api_key_meta:{key_prefix}")
+        redis_client.srem(f"user_keys:{user_id}", key_prefix)
         
         return True
     
     @staticmethod
     def get_user_keys(user_id: str) -> list:
-        """Get all keys for a user"""
+        """Get all key metadata for a user (NOT full keys - those are never stored)"""
         if not REDIS_AVAILABLE:
             return []
-        return list(redis_client.smembers(f"user_keys:{user_id}"))
+        
+        prefixes = list(redis_client.smembers(f"user_keys:{user_id}"))
+        
+        # Return metadata for each key
+        keys_info = []
+        for prefix in prefixes:
+            key_data = redis_client.hgetall(f"api_key_meta:{prefix}")
+            if key_data:
+                keys_info.append({
+                    "prefix": prefix,
+                    "tier": key_data.get("tier"),
+                    "created_at": key_data.get("created_at"),
+                    "last_used": key_data.get("last_used", "never"),
+                    "total_requests": key_data.get("total_requests", 0)
+                })
+        
+        return keys_info
 
 
 class JWTManager:
-    """Manage JWT tokens"""
+    """Manage JWT tokens - with timezone-aware datetime"""
     
     @staticmethod
     def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -127,9 +250,9 @@ class JWTManager:
         to_encode = data.copy()
         
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = datetime.now(timezone.utc) + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         
         to_encode.update({"exp": expire})
         
@@ -144,7 +267,9 @@ class JWTManager:
             return payload
         except jwt.ExpiredSignatureError:
             return None
-        except jwt.JWTError:
+        except jwt.InvalidTokenError:
+            return None
+        except Exception:
             return None
 
 

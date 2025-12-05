@@ -18,9 +18,11 @@ from typing import Optional
 import uvicorn
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import sys
 import uuid
+import time
+import asyncio
 from contextvars import ContextVar
 
 # Request ID context variable for tracing
@@ -37,6 +39,7 @@ from security.input_validator import (
     TranscriptionConfig,
     SecurityHeadersMiddleware
 )
+from security.usage_quotas import UsageQuotaManager, DAILY_QUOTAS
 from reliability.circuit_breaker import circuit_breaker, async_circuit_breaker, registry as breaker_registry, CircuitBreakerError
 from reliability.retry_handler import retry, RetryExhausted, AsyncRetryHandler
 from reliability.health_checks import (
@@ -52,6 +55,9 @@ from scalability.cache_manager import (
     transcription_cache,
     hash_audio
 )
+
+# Prometheus metrics
+from monitoring.prometheus_metrics import MetricsHelper, metrics_app, PROMETHEUS_AVAILABLE
 
 # Configure logging with rotation
 from logging.handlers import RotatingFileHandler
@@ -96,14 +102,22 @@ app = FastAPI(
 # Add security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
 
-# Add CORS (configure appropriately for production)
+# CORS Configuration - STRICT VALIDATION
 _allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+
+# CRITICAL: Hard fail in production if CORS is not configured properly
+if IS_PRODUCTION and _allowed_origins == "*":
+    logger.critical("❌ FATAL: CORS allows all origins (*) in PRODUCTION!")
+    logger.critical("❌ Set ALLOWED_ORIGINS environment variable to specific domains")
+    logger.critical("❌ Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com")
+    raise RuntimeError("CORS misconfiguration - cannot start in production with ALLOWED_ORIGINS=*")
+
 if _allowed_origins == "*":
     cors_origins = ["*"]
-    if IS_PRODUCTION:
-        logger.warning("⚠️  CORS allows all origins! Set ALLOWED_ORIGINS for production.")
+    logger.warning("⚠️  CORS allows ALL origins - OK for development only")
 else:
     cors_origins = [origin.strip() for origin in _allowed_origins.split(",")]
+    logger.info(f"✅ CORS configured for: {cors_origins}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -112,6 +126,13 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
+
+# Mount Prometheus metrics endpoint
+if PROMETHEUS_AVAILABLE and metrics_app:
+    app.mount("/metrics", metrics_app)
+    logger.info("✅ Prometheus metrics enabled at /metrics")
+else:
+    logger.warning("⚠️  Prometheus metrics disabled (prometheus-client not installed)")
 
 # Global instances
 translator: Optional[AsyncRealtimeTranslator] = None
@@ -179,36 +200,75 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize on startup WITH VALIDATION"""
+    """Initialize on startup WITH GRACEFUL DEGRADATION"""
     global translator
     
     logger.info("🚀 Starting API...")
     logger.info(f"Environment: {ENVIRONMENT}")
     
-    # Validate environment in production
+    # Validate production environment
     if IS_PRODUCTION:
         if not os.getenv("JWT_SECRET_KEY"):
-            logger.critical("⚠️  SECURITY WARNING: JWT_SECRET_KEY not set in production!")
+            logger.critical("❌ FATAL: JWT_SECRET_KEY not set in production!")
+            raise RuntimeError("JWT_SECRET_KEY required in production")
     
     # Create required directories
     os.makedirs("logs", exist_ok=True)
     os.makedirs("outputs", exist_ok=True)
     
-    # Initialize translator
-    translator = AsyncRealtimeTranslator(
-        source_language=os.getenv("SOURCE_LANGUAGE", "ko"),
-        target_language=os.getenv("TARGET_LANGUAGE", "eng_Latn"),
-        whisper_model=os.getenv("WHISPER_MODEL", "base"),
-        max_workers=int(os.getenv("MAX_WORKERS", "4"))
-    )
+    # Initialize translator WITH GRACEFUL DEGRADATION
+    max_retries = 3
+    model_load_success = False
     
-    # Load models
-    await translator.load_models()
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Loading models (attempt {attempt + 1}/{max_retries})...")
+            
+            translator = AsyncRealtimeTranslator(
+                source_language=os.getenv("SOURCE_LANGUAGE", "ko"),
+                target_language=os.getenv("TARGET_LANGUAGE", "eng_Latn"),
+                whisper_model=os.getenv("WHISPER_MODEL", "base"),
+                max_workers=int(os.getenv("MAX_WORKERS", "4"))
+            )
+            
+            await translator.load_models()
+            model_load_success = True
+            logger.info("✅ Models loaded successfully")
+            
+            # Update Prometheus metrics
+            MetricsHelper.update_model_status("whisper", True)
+            MetricsHelper.update_model_status("nllb", True)
+            break
+        
+        except Exception as e:
+            logger.error(f"Model loading failed (attempt {attempt + 1}): {e}")
+            MetricsHelper.record_error("ModelLoadError", "startup")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(5)
+    
+    # GRACEFUL DEGRADATION: Start API even if models fail
+    if not model_load_success:
+        logger.warning("⚠️  Models failed to load - API starting in DEGRADED MODE")
+        logger.warning("⚠️  Translation endpoints will return 503 errors")
+        translator = None  # Set to None to indicate degraded state
+        MetricsHelper.update_model_status("whisper", False)
+        MetricsHelper.update_model_status("nllb", False)
     
     # Initialize health checks
     initialize_health_checks(translator=translator)
     
-    logger.info("✅ API v2 started successfully")
+    # Check dependencies status
+    if cache_manager.enabled:
+        logger.info("✅ Redis connected - caching enabled")
+    else:
+        logger.warning("⚠️  Redis unavailable - caching disabled")
+    
+    if rate_limiter.enabled:
+        logger.info("✅ Rate limiting enabled")
+    else:
+        logger.warning("⚠️  Rate limiting disabled")
+    
+    logger.info(f"✅ API started (models: {'loaded' if model_load_success else 'DEGRADED'})")
 
 
 @app.on_event("shutdown")
@@ -227,6 +287,41 @@ async def shutdown_event():
 # =============================================================================
 # MIDDLEWARE
 # =============================================================================
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    """Track request metrics for Prometheus"""
+    start_time = time.time()
+    
+    try:
+        response = await call_next(request)
+        duration = time.time() - start_time
+        
+        # Record metrics (skip /metrics endpoint itself)
+        if not request.url.path.startswith("/metrics"):
+            MetricsHelper.record_request(
+                method=request.method,
+                endpoint=request.url.path,
+                status=response.status_code,
+                duration=duration
+            )
+        
+        return response
+    
+    except Exception as e:
+        duration = time.time() - start_time
+        MetricsHelper.record_request(
+            method=request.method,
+            endpoint=request.url.path,
+            status=500,
+            duration=duration
+        )
+        MetricsHelper.record_error(
+            error_type=type(e).__name__,
+            endpoint=request.url.path
+        )
+        raise
+
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
@@ -346,10 +441,77 @@ async def create_api_key(
             "user_id": user_id,
             "tier": tier,
             "rate_limits": limits,
-            "created_at": datetime.now().isoformat()
+            "warning": "⚠️ Save this key immediately! It will not be shown again.",
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
         logger.error(f"Error creating API key: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auth/rotate-api-key", tags=["Authentication"])
+async def rotate_api_key_endpoint(
+    request: Request,
+    user: dict = Depends(auth_manager.verify_request)
+):
+    """
+    Rotate API key (generate new, invalidate old)
+    
+    **Authentication required (using old key)**
+    
+    Returns new API key - SAVE IT IMMEDIATELY!
+    """
+    # Get old API key from request
+    old_key = request.headers.get("X-API-Key")
+    
+    if not old_key:
+        raise HTTPException(
+            status_code=400,
+            detail="API key required in X-API-Key header"
+        )
+    
+    try:
+        # Rotate key
+        new_key = APIKeyManager.rotate_api_key(old_key)
+        
+        return {
+            "message": "API key rotated successfully",
+            "new_api_key": new_key,
+            "warning": "⚠️ Save this key immediately! Old key is now invalid.",
+            "rotated_at": datetime.now(timezone.utc).isoformat()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Key rotation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/auth/my-keys", tags=["Authentication"])
+async def list_my_keys(
+    request: Request,
+    user: dict = Depends(auth_manager.verify_request)
+):
+    """
+    List all API keys for current user
+    
+    Returns key metadata (not full keys - those are never stored)
+    """
+    user_id = user.get("user_id")
+    
+    try:
+        keys = APIKeyManager.get_user_keys(user_id)
+        
+        return {
+            "user_id": user_id,
+            "total_keys": len(keys),
+            "keys": keys,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to list keys: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -370,6 +532,17 @@ async def translate_text_endpoint(
     - Circuit breaker protection
     - Input validation
     """
+    # Check if models are loaded (graceful degradation)
+    if translator is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Service Degraded",
+                "message": "Translation models are not available. Please try again later.",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+    
     # Rate limiting
     tier = user.get("tier", "free")
     limits = get_rate_limit(tier)
@@ -382,6 +555,7 @@ async def translate_text_endpoint(
     )
     
     if not allowed:
+        MetricsHelper.record_rate_limit_exceeded(tier)
         raise HTTPException(
             status_code=429,
             detail={
@@ -401,6 +575,12 @@ async def translate_text_endpoint(
     
     if cached:
         logger.info(f"Cache hit for translation: {translation_request.text[:50]}")
+        MetricsHelper.record_translation(
+            translation_request.source_language,
+            translation_request.target_language,
+            cached=True,
+            duration=0
+        )
         return {
             "original": translation_request.text,
             "translated": cached,
@@ -625,6 +805,46 @@ async def get_supported_languages():
     }
 
 
+@app.get("/usage", tags=["Usage"])
+async def get_usage(
+    request: Request,
+    user: dict = Depends(auth_manager.verify_request)
+):
+    """
+    Get current usage and quotas for authenticated user
+    
+    Returns usage summary across all resources
+    """
+    user_id = user.get("user_id")
+    tier = user.get("tier", "free")
+    
+    summary = UsageQuotaManager.get_usage_summary(user_id, tier)
+    
+    return {
+        "user_id": user_id,
+        "tier": tier,
+        "usage": summary,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@app.get("/usage/quotas", tags=["Usage"])
+async def get_quota_tiers():
+    """
+    Get quota limits for all tiers
+    
+    Public endpoint - no authentication required
+    """
+    return {
+        "tiers": DAILY_QUOTAS,
+        "resources": {
+            "requests": "Total API requests per day",
+            "compute_seconds": "Total compute time in seconds per day",
+            "audio_minutes": "Total audio processing time in minutes per day"
+        }
+    }
+
+
 # =============================================================================
 # DEVELOPMENT ENDPOINTS
 # =============================================================================
@@ -655,7 +875,7 @@ async def create_dev_api_key(tier: str = "pro"):
             "rate_limits": limits,
             "warning": "⚠️ This is a DEVELOPMENT key. Do not use in production!",
             "usage": f'curl -H "X-API-Key: {test_key}" http://localhost:8000/translate/text',
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
     
     except Exception as e:

@@ -22,9 +22,11 @@ redis==5.0.1
 # Security
 PyJWT==2.8.0
 python-multipart==0.0.6
+bcrypt==4.1.2
 
 # Monitoring
 psutil==5.9.7
+prometheus-client==0.19.0
 
 # Testing
 pytest==8.0.0

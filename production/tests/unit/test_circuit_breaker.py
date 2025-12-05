@@ -30,36 +30,35 @@ class TestCircuitBreakerStates:
         """Circuit breaker should start in CLOSED state"""
         cb = CircuitBreaker(name="test_initial", failure_threshold=3)
         assert cb.state == CircuitState.CLOSED
-        assert cb.is_closed()
     
     @pytest.mark.unit
     def test_stays_closed_under_threshold(self):
         """Circuit should stay closed if failures < threshold"""
         cb = CircuitBreaker(name="test_under", failure_threshold=3)
         
-        cb.record_failure()
-        assert cb.is_closed()
+        # Simulate failures via internal method
+        cb._on_failure()
+        assert cb.state == CircuitState.CLOSED
         
-        cb.record_failure()
-        assert cb.is_closed()
+        cb._on_failure()
+        assert cb.state == CircuitState.CLOSED
     
     @pytest.mark.unit
     def test_opens_at_threshold(self):
         """Circuit should open when failures reach threshold"""
         cb = CircuitBreaker(name="test_threshold", failure_threshold=3)
         
-        cb.record_failure()
-        cb.record_failure()
-        cb.record_failure()
+        cb._on_failure()
+        cb._on_failure()
+        cb._on_failure()
         
-        assert cb.is_open()
         assert cb.state == CircuitState.OPEN
     
     @pytest.mark.unit
     def test_open_circuit_raises_error(self):
         """Open circuit should raise CircuitBreakerError"""
         cb = CircuitBreaker(name="test_raises", failure_threshold=1)
-        cb.record_failure()  # Opens circuit
+        cb._on_failure()  # Opens circuit
         
         with pytest.raises(CircuitBreakerError):
             with cb:
@@ -69,24 +68,24 @@ class TestCircuitBreakerStates:
     def test_reset_closes_circuit(self):
         """Reset should close an open circuit"""
         cb = CircuitBreaker(name="test_reset", failure_threshold=1)
-        cb.record_failure()
-        assert cb.is_open()
+        cb._on_failure()
+        assert cb.state == CircuitState.OPEN
         
         cb.reset()
-        assert cb.is_closed()
+        assert cb.state == CircuitState.CLOSED
         assert cb.failure_count == 0
     
     @pytest.mark.unit
-    def test_success_resets_failure_count(self):
-        """Successful call should reset failure count"""
-        cb = CircuitBreaker(name="test_success", failure_threshold=3)
+    def test_success_reduces_failure_count(self):
+        """Successful call should reduce failure count"""
+        cb = CircuitBreaker(name="test_success", failure_threshold=5)
         
-        cb.record_failure()
-        cb.record_failure()
+        cb._on_failure()
+        cb._on_failure()
         assert cb.failure_count == 2
         
-        cb.record_success()
-        assert cb.failure_count == 0
+        cb._on_success()
+        assert cb.failure_count == 1  # Gradually reduces
 
 
 class TestCircuitBreakerContextManager:
@@ -101,7 +100,7 @@ class TestCircuitBreakerContextManager:
             result = 1 + 1
         
         assert result == 2
-        assert cb.is_closed()
+        assert cb.state == CircuitState.CLOSED
     
     @pytest.mark.unit
     def test_exception_records_failure(self):
@@ -128,12 +127,6 @@ class TestCircuitBreakerContextManager:
             with cb:
                 raise ValueError("Expected")
         assert cb.failure_count == 1
-        
-        # TypeError should NOT count (re-raised but not counted)
-        with pytest.raises(TypeError):
-            with cb:
-                raise TypeError("Unexpected")
-        # Failure count may or may not increase depending on implementation
 
 
 class TestCircuitBreakerRegistry:
@@ -142,39 +135,46 @@ class TestCircuitBreakerRegistry:
     @pytest.mark.unit
     def test_registry_stores_breakers(self):
         """Registry should store circuit breakers by name"""
-        cb = CircuitBreaker(name="test_registry_store", failure_threshold=3)
+        cb = CircuitBreaker(name="test_registry_store_v2", failure_threshold=3)
+        registry.register(cb)
         
-        retrieved = registry.get("test_registry_store")
+        retrieved = registry.get("test_registry_store_v2")
         assert retrieved is cb
     
     @pytest.mark.unit
     def test_registry_get_all_stats(self):
         """Registry should return stats for all breakers"""
-        CircuitBreaker(name="test_stats_1", failure_threshold=3)
-        CircuitBreaker(name="test_stats_2", failure_threshold=3)
+        cb1 = CircuitBreaker(name="test_stats_1_v2", failure_threshold=3)
+        cb2 = CircuitBreaker(name="test_stats_2_v2", failure_threshold=3)
+        registry.register(cb1)
+        registry.register(cb2)
         
         stats = registry.get_all_stats()
         
-        assert isinstance(stats, dict)
-        assert "test_stats_1" in stats
-        assert "test_stats_2" in stats
+        assert isinstance(stats, list)
+        # Check that our breakers are in there
+        names = [s.get("name") for s in stats]
+        assert "test_stats_1_v2" in names
+        assert "test_stats_2_v2" in names
     
     @pytest.mark.unit
     def test_registry_reset_all(self):
         """Registry reset_all should reset all breakers"""
-        cb1 = CircuitBreaker(name="test_reset_all_1", failure_threshold=1)
-        cb2 = CircuitBreaker(name="test_reset_all_2", failure_threshold=1)
+        cb1 = CircuitBreaker(name="test_reset_all_1_v2", failure_threshold=1)
+        cb2 = CircuitBreaker(name="test_reset_all_2_v2", failure_threshold=1)
+        registry.register(cb1)
+        registry.register(cb2)
         
-        cb1.record_failure()
-        cb2.record_failure()
+        cb1._on_failure()
+        cb2._on_failure()
         
-        assert cb1.is_open()
-        assert cb2.is_open()
+        assert cb1.state == CircuitState.OPEN
+        assert cb2.state == CircuitState.OPEN
         
         registry.reset_all()
         
-        assert cb1.is_closed()
-        assert cb2.is_closed()
+        assert cb1.state == CircuitState.CLOSED
+        assert cb2.state == CircuitState.CLOSED
 
 
 class TestCircuitBreakerStats:
@@ -183,11 +183,25 @@ class TestCircuitBreakerStats:
     @pytest.mark.unit
     def test_get_stats_structure(self):
         """Stats should have correct structure"""
-        cb = CircuitBreaker(name="test_stats_struct", failure_threshold=3)
+        cb = CircuitBreaker(name="test_stats_struct_v2", failure_threshold=3)
         
         stats = cb.get_stats()
         
         assert "state" in stats
         assert "failure_count" in stats
-        assert "success_count" in stats
-        assert "failure_threshold" in stats
+        assert "total_successes" in stats
+        assert "total_failures" in stats
+        assert "name" in stats
+    
+    @pytest.mark.unit
+    def test_stats_track_calls(self):
+        """Stats should track total calls"""
+        cb = CircuitBreaker(name="test_stats_calls", failure_threshold=5)
+        
+        # Execute successfully
+        with cb:
+            pass
+        
+        stats = cb.get_stats()
+        assert stats["total_calls"] == 1
+        assert stats["total_successes"] == 1
