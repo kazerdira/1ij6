@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  translator-api:
+    build: .
+    container_name: realtime-translator-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - whisper-cache:/root/.cache/whisper
+      - huggingface-cache:/root/.cache/huggingface
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SOURCE_LANGUAGE=ko
+      - TARGET_LANGUAGE=eng_Latn
+      - WHISPER_MODEL=base
+      - USE_GPU=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - translator-network
+
+  # Optional: GPU-enabled version
+  translator-api-gpu:
+    build: .
+    container_name: realtime-translator-api-gpu
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - whisper-cache:/root/.cache/whisper
+      - huggingface-cache:/root/.cache/huggingface
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SOURCE_LANGUAGE=ko
+      - TARGET_LANGUAGE=eng_Latn
+      - WHISPER_MODEL=base
+      - USE_GPU=true
+    runtime: nvidia
+    restart: unless-stopped
+    profiles:
+      - gpu
+    networks:
+      - translator-network
+
+  # Optional: Batch processor service
+  batch-processor:
+    build: .
+    container_name: translator-batch-processor
+    command: python batch_processor.py --watch /app/inputs
+    volumes:
+      - ./inputs:/app/inputs
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - whisper-cache:/root/.cache/whisper
+      - huggingface-cache:/root/.cache/huggingface
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SOURCE_LANGUAGE=ko
+      - TARGET_LANGUAGE=eng_Latn
+      - WHISPER_MODEL=base
+    restart: unless-stopped
+    profiles:
+      - batch
+    networks:
+      - translator-network
+
+volumes:
+  whisper-cache:
+    driver: local
+  huggingface-cache:
+    driver: local
+
+networks:
+  translator-network:
+    driver: bridge

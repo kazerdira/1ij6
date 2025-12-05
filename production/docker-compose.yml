@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Translation API
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      - SOURCE_LANGUAGE=${SOURCE_LANGUAGE:-ko}
+      - TARGET_LANGUAGE=${TARGET_LANGUAGE:-eng_Latn}
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - MAX_WORKERS=${MAX_WORKERS:-4}
+      - ENVIRONMENT=production
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./outputs:/app/outputs
+      # Optional: Mount model cache to avoid re-downloading
+      - model-cache:/root/.cache
+    healthcheck:
+      # Using python instead of curl (curl not in slim image)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/simple', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Give time for model loading
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  model-cache:
