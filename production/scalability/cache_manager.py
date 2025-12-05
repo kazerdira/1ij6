@@ -2,6 +2,7 @@
 """
 Cache Manager with Redis
 Cache translations to avoid redundant processing
+WITH CIRCUIT BREAKER PROTECTION
 """
 
 import hashlib
@@ -21,9 +22,12 @@ except ImportError:
     REDIS_AVAILABLE = False
     logger.warning("Redis not installed. Install with: pip install redis")
 
+# Import circuit breaker
+from reliability.circuit_breaker import CircuitBreaker
+
 
 class CacheManager:
-    """Redis-based cache manager for translations"""
+    """Redis-based cache manager for translations WITH CIRCUIT BREAKER"""
     
     def __init__(
         self,
@@ -34,24 +38,27 @@ class CacheManager:
         default_ttl: int = 3600  # 1 hour
     ):
         """
-        Initialize cache manager
-        
-        Args:
-            host: Redis host (uses REDIS_HOST env var if not provided)
-            port: Redis port (uses REDIS_PORT env var if not provided)
-            db: Redis database number
-            password: Redis password (if required)
-            default_ttl: Default time-to-live in seconds
+        Initialize cache manager WITH CIRCUIT BREAKER
         """
         self.redis_client = None
         self.enabled = False
+        self.default_ttl = default_ttl
+        
+        # Statistics
+        self.hits = 0
+        self.misses = 0
+        self.sets = 0
+        
+        # Circuit breaker for Redis operations
+        self.redis_breaker = CircuitBreaker(
+            name="redis_cache",
+            failure_threshold=3,
+            recovery_timeout=30,
+            expected_exception=Exception
+        )
         
         if not REDIS_AVAILABLE:
             logger.warning("Redis module not available. Caching disabled.")
-            self.default_ttl = default_ttl
-            self.hits = 0
-            self.misses = 0
-            self.sets = 0
             return
         
         host = host or os.getenv("REDIS_HOST", "localhost")
@@ -63,9 +70,11 @@ class CacheManager:
                 port=port,
                 db=db,
                 password=password,
-                decode_responses=False,  # Handle binary data
+                decode_responses=False,
                 socket_timeout=5,
-                socket_connect_timeout=5
+                socket_connect_timeout=5,
+                retry_on_timeout=True,
+                health_check_interval=30
             )
             
             # Test connection
@@ -77,13 +86,6 @@ class CacheManager:
             logger.warning(f"Failed to connect to Redis: {e}. Caching disabled.")
             self.redis_client = None
             self.enabled = False
-        
-        self.default_ttl = default_ttl
-        
-        # Statistics
-        self.hits = 0
-        self.misses = 0
-        self.sets = 0
     
     def _generate_key(self, prefix: str, data: Any) -> str:
         """
@@ -107,31 +109,26 @@ class CacheManager:
     
     def get(self, key: str) -> Optional[Any]:
         """
-        Get value from cache
-        
-        Args:
-            key: Cache key
-        
-        Returns:
-            Cached value or None
+        Get value from cache WITH CIRCUIT BREAKER
         """
         if not self.enabled:
             self.misses += 1
             return None
         
         try:
-            value = self.redis_client.get(key)
-            
-            if value is None:
-                self.misses += 1
-                return None
-            
-            # Deserialize
-            deserialized = pickle.loads(value)
-            self.hits += 1
-            
-            logger.debug(f"Cache HIT: {key}")
-            return deserialized
+            with self.redis_breaker:
+                value = self.redis_client.get(key)
+                
+                if value is None:
+                    self.misses += 1
+                    return None
+                
+                # Deserialize
+                deserialized = pickle.loads(value)
+                self.hits += 1
+                
+                logger.debug(f"Cache HIT: {key}")
+                return deserialized
         
         except Exception as e:
             logger.error(f"Cache get error for key {key}: {e}")
@@ -140,26 +137,22 @@ class CacheManager:
     
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
         """
-        Set value in cache
-        
-        Args:
-            key: Cache key
-            value: Value to cache
-            ttl: Time-to-live in seconds (None = default)
+        Set value in cache WITH CIRCUIT BREAKER
         """
         if not self.enabled:
             return
         
         try:
-            # Serialize
-            serialized = pickle.dumps(value)
-            
-            # Set with TTL
-            ttl = ttl or self.default_ttl
-            self.redis_client.setex(key, ttl, serialized)
-            
-            self.sets += 1
-            logger.debug(f"Cache SET: {key} (TTL: {ttl}s)")
+            with self.redis_breaker:
+                # Serialize
+                serialized = pickle.dumps(value)
+                
+                # Set with TTL
+                ttl = ttl or self.default_ttl
+                self.redis_client.setex(key, ttl, serialized)
+                
+                self.sets += 1
+                logger.debug(f"Cache SET: {key} (TTL: {ttl}s)")
         
         except Exception as e:
             logger.error(f"Cache set error for key {key}: {e}")

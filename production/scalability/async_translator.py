@@ -2,6 +2,7 @@
 """
 Async Real-time Translator
 Non-blocking async implementation for handling concurrent requests
+WITH CIRCUIT BREAKERS AND RETRY LOGIC
 """
 
 import asyncio
@@ -31,11 +32,16 @@ try:
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
 
+# Import circuit breaker and retry
+from reliability.circuit_breaker import async_circuit_breaker, CircuitBreakerError
+from reliability.retry_handler import async_retry, RetryExhausted
+
 
 class AsyncRealtimeTranslator:
     """
     Async translator that can handle multiple requests concurrently
     Uses thread pool for CPU-bound operations (model inference)
+    WITH CIRCUIT BREAKERS AND RETRY LOGIC
     """
     
     def __init__(
@@ -79,58 +85,75 @@ class AsyncRealtimeTranslator:
         self.total_requests = 0
         self.active_requests = 0
         self.max_concurrent_requests = 0
+        self.failed_requests = 0
         
         logger.info(f"AsyncRealtimeTranslator initialized on {self.device}")
     
+    @async_retry(max_attempts=3, base_delay=2.0, exceptions=(OSError, RuntimeError, ConnectionError))
     async def load_models(self):
-        """Load models asynchronously"""
+        """Load models asynchronously WITH RETRY LOGIC"""
         if self.whisper_model is not None and self.translator_model is not None:
             return  # Already loaded
         
         if not WHISPER_AVAILABLE or not TRANSFORMERS_AVAILABLE:
-            raise ImportError("whisper and transformers are required. Install with: pip install openai-whisper transformers")
+            raise ImportError("whisper and transformers are required")
         
         async with self.model_lock:
             # Double-check after acquiring lock
             if self.whisper_model is not None and self.translator_model is not None:
                 return
             
-            logger.info("Loading models...")
+            logger.info("Loading models with retry protection...")
             
-            # Load in thread pool (blocking operations)
             loop = asyncio.get_event_loop()
             
-            # Load Whisper
-            self.whisper_model = await loop.run_in_executor(
-                self.executor,
-                whisper.load_model,
-                self.whisper_model_name
-            )
+            try:
+                # Load Whisper
+                logger.info(f"Loading Whisper model: {self.whisper_model_name}")
+                self.whisper_model = await loop.run_in_executor(
+                    self.executor,
+                    whisper.load_model,
+                    self.whisper_model_name
+                )
+                logger.info("✅ Whisper model loaded")
+                
+                # Load translator
+                model_name = "facebook/nllb-200-distilled-600M"
+                
+                logger.info(f"Loading NLLB tokenizer...")
+                self.translator_tokenizer = await loop.run_in_executor(
+                    self.executor,
+                    AutoTokenizer.from_pretrained,
+                    model_name
+                )
+                logger.info("✅ NLLB tokenizer loaded")
+                
+                logger.info(f"Loading NLLB model...")
+                self.translator_model = await loop.run_in_executor(
+                    self.executor,
+                    AutoModelForSeq2SeqLM.from_pretrained,
+                    model_name
+                )
+                logger.info("✅ NLLB model loaded")
+                
+                # Move to GPU if available
+                if self.device == "cuda" and TORCH_AVAILABLE:
+                    logger.info("Moving model to GPU...")
+                    self.translator_model = self.translator_model.to(self.device)
+                
+                logger.info("✅ All models loaded successfully")
             
-            # Load translator
-            model_name = "facebook/nllb-200-distilled-600M"
-            
-            self.translator_tokenizer = await loop.run_in_executor(
-                self.executor,
-                AutoTokenizer.from_pretrained,
-                model_name
-            )
-            
-            self.translator_model = await loop.run_in_executor(
-                self.executor,
-                AutoModelForSeq2SeqLM.from_pretrained,
-                model_name
-            )
-            
-            # Move to GPU if available
-            if self.device == "cuda" and TORCH_AVAILABLE:
-                self.translator_model = self.translator_model.to(self.device)
-            
-            logger.info("Models loaded successfully")
+            except Exception as e:
+                logger.error(f"Error loading models: {e}")
+                self.whisper_model = None
+                self.translator_model = None
+                self.translator_tokenizer = None
+                raise
     
+    @async_circuit_breaker(failure_threshold=5, recovery_timeout=60, name="whisper_transcribe")
     async def transcribe_audio(self, audio_data: np.ndarray) -> str:
         """
-        Transcribe audio asynchronously
+        Transcribe audio asynchronously WITH CIRCUIT BREAKER
         
         Args:
             audio_data: Audio numpy array
@@ -138,7 +161,6 @@ class AsyncRealtimeTranslator:
         Returns:
             Transcribed text
         """
-        # Ensure models are loaded
         await self.load_models()
         
         # Normalize audio
@@ -148,17 +170,20 @@ class AsyncRealtimeTranslator:
             if max_val > 0:
                 audio_float = audio_float / max_val
         
-        # Run transcription in thread pool (CPU-bound)
         loop = asyncio.get_event_loop()
         
         def _transcribe():
-            result = self.whisper_model.transcribe(
-                audio_float,
-                language=self.source_language,
-                task="transcribe",
-                fp16=False
-            )
-            return result["text"].strip()
+            try:
+                result = self.whisper_model.transcribe(
+                    audio_float,
+                    language=self.source_language,
+                    task="transcribe",
+                    fp16=False
+                )
+                return result["text"].strip()
+            except Exception as e:
+                logger.error(f"Whisper transcription error: {e}")
+                raise
         
         transcribed_text = await loop.run_in_executor(
             self.executor,
@@ -167,9 +192,10 @@ class AsyncRealtimeTranslator:
         
         return transcribed_text
     
+    @async_circuit_breaker(failure_threshold=5, recovery_timeout=60, name="nllb_translate")
     async def translate_text(self, text: str) -> str:
         """
-        Translate text asynchronously
+        Translate text asynchronously WITH CIRCUIT BREAKER
         
         Args:
             text: Text to translate
@@ -177,51 +203,49 @@ class AsyncRealtimeTranslator:
         Returns:
             Translated text
         """
-        # Ensure models are loaded
         await self.load_models()
         
         if not text:
             return ""
         
-        # Run translation in thread pool
         loop = asyncio.get_event_loop()
         
         def _translate():
-            # Tokenize
-            inputs = self.translator_tokenizer(
-                text,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=512
-            )
-            
-            # Move to GPU if available
-            if self.device == "cuda" and TORCH_AVAILABLE:
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
-            
-            # Get target language token ID
-            target_lang_id = self.translator_tokenizer.convert_tokens_to_ids(
-                self.target_language
-            )
-            
-            # Generate translation
-            with torch.no_grad():
-                translated_tokens = self.translator_model.generate(
-                    **inputs,
-                    forced_bos_token_id=target_lang_id,
-                    max_length=512,
-                    num_beams=5,
-                    early_stopping=True
+            try:
+                inputs = self.translator_tokenizer(
+                    text,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=512
                 )
+                
+                if self.device == "cuda" and TORCH_AVAILABLE:
+                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                
+                target_lang_id = self.translator_tokenizer.convert_tokens_to_ids(
+                    self.target_language
+                )
+                
+                with torch.no_grad():
+                    translated_tokens = self.translator_model.generate(
+                        **inputs,
+                        forced_bos_token_id=target_lang_id,
+                        max_length=512,
+                        num_beams=5,
+                        early_stopping=True
+                    )
+                
+                translated_text = self.translator_tokenizer.batch_decode(
+                    translated_tokens,
+                    skip_special_tokens=True
+                )[0]
+                
+                return translated_text
             
-            # Decode
-            translated_text = self.translator_tokenizer.batch_decode(
-                translated_tokens,
-                skip_special_tokens=True
-            )[0]
-            
-            return translated_text
+            except Exception as e:
+                logger.error(f"Translation error: {e}")
+                raise
         
         translated_text = await loop.run_in_executor(
             self.executor,
@@ -233,6 +257,7 @@ class AsyncRealtimeTranslator:
     async def process_audio(self, audio_data: np.ndarray) -> Tuple[str, str]:
         """
         Process audio: transcribe and translate
+        WITH ERROR HANDLING FOR CIRCUIT BREAKERS
         
         Args:
             audio_data: Audio numpy array
@@ -240,7 +265,6 @@ class AsyncRealtimeTranslator:
         Returns:
             (original_text, translated_text)
         """
-        # Track concurrent requests
         self.active_requests += 1
         self.total_requests += 1
         self.max_concurrent_requests = max(
@@ -249,17 +273,41 @@ class AsyncRealtimeTranslator:
         )
         
         try:
-            # Transcribe
-            original = await self.transcribe_audio(audio_data)
+            # Transcribe with circuit breaker
+            try:
+                original = await self.transcribe_audio(audio_data)
+            except CircuitBreakerError:
+                logger.error("Transcription circuit breaker open")
+                self.failed_requests += 1
+                raise
+            except RetryExhausted:
+                logger.error("Transcription retry exhausted")
+                self.failed_requests += 1
+                raise
             
             if not original:
                 return "", ""
             
-            # Translate
-            translated = await self.translate_text(original)
+            # Translate with circuit breaker
+            try:
+                translated = await self.translate_text(original)
+            except CircuitBreakerError:
+                logger.error("Translation circuit breaker open")
+                self.failed_requests += 1
+                return original, ""  # Return transcription only
+            except RetryExhausted:
+                logger.error("Translation retry exhausted")
+                self.failed_requests += 1
+                return original, ""
             
             return original, translated
         
+        except (CircuitBreakerError, RetryExhausted):
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            self.failed_requests += 1
+            raise
         finally:
             self.active_requests -= 1
     
@@ -276,7 +324,6 @@ class AsyncRealtimeTranslator:
         tasks = [self.process_audio(audio) for audio in audio_list]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Handle exceptions
         processed_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
@@ -289,20 +336,30 @@ class AsyncRealtimeTranslator:
     
     def get_stats(self) -> dict:
         """Get translator statistics"""
+        success_rate = 0
+        if self.total_requests > 0:
+            success_rate = ((self.total_requests - self.failed_requests) / self.total_requests) * 100
+        
         return {
             'total_requests': self.total_requests,
             'active_requests': self.active_requests,
             'max_concurrent_requests': self.max_concurrent_requests,
+            'failed_requests': self.failed_requests,
+            'success_rate': round(success_rate, 2),
             'device': self.device,
             'models_loaded': self.whisper_model is not None
         }
     
     async def cleanup(self):
         """Cleanup resources"""
+        logger.info("Shutting down translator...")
         self.executor.shutdown(wait=True)
         
-        # Clear GPU memory
         if self.device == "cuda" and TORCH_AVAILABLE:
-            torch.cuda.empty_cache()
+            try:
+                torch.cuda.empty_cache()
+                logger.info("GPU memory cleared")
+            except Exception as e:
+                logger.error(f"Error clearing GPU: {e}")
         
         logger.info("AsyncRealtimeTranslator cleaned up")

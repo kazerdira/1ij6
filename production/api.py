@@ -20,6 +20,11 @@ import os
 import logging
 from datetime import datetime
 import sys
+import uuid
+from contextvars import ContextVar
+
+# Request ID context variable for tracing
+request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 
 # Add production folder to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -32,7 +37,7 @@ from security.input_validator import (
     TranscriptionConfig,
     SecurityHeadersMiddleware
 )
-from reliability.circuit_breaker import circuit_breaker, async_circuit_breaker, registry as breaker_registry
+from reliability.circuit_breaker import circuit_breaker, async_circuit_breaker, registry as breaker_registry, CircuitBreakerError
 from reliability.retry_handler import retry, RetryExhausted, AsyncRetryHandler
 from reliability.health_checks import (
     health_monitor,
@@ -114,14 +119,78 @@ rate_limiter = RateLimiter()
 auth_manager = AuthManager()
 
 
+# =============================================================================
+# GLOBAL EXCEPTION HANDLERS
+# =============================================================================
+
+@app.exception_handler(CircuitBreakerError)
+async def circuit_breaker_handler(request: Request, exc: CircuitBreakerError):
+    """Handle circuit breaker errors - service unavailable"""
+    request_id = request_id_var.get()
+    logger.error(f"Circuit breaker open: {exc}", extra={"request_id": request_id})
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "Service Temporarily Unavailable",
+            "message": "The service is experiencing high error rates. Please try again later.",
+            "request_id": request_id,
+            "timestamp": datetime.now().isoformat(),
+            "retry_after": 60
+        },
+        headers={"Retry-After": "60"}
+    )
+
+
+@app.exception_handler(RetryExhausted)
+async def retry_exhausted_handler(request: Request, exc: RetryExhausted):
+    """Handle retry exhaustion"""
+    request_id = request_id_var.get()
+    logger.error(f"Retry exhausted: {exc}", extra={"request_id": request_id})
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Operation Failed",
+            "message": "The operation failed after multiple attempts. Please try again later.",
+            "request_id": request_id,
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle all unhandled exceptions"""
+    request_id = request_id_var.get()
+    logger.error(f"Unhandled exception: {exc}", extra={"request_id": request_id}, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred.",
+            "request_id": request_id,
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+
+
+# =============================================================================
+# STARTUP / SHUTDOWN
+# =============================================================================
+
 @app.on_event("startup")
 async def startup_event():
-    """Initialize on startup"""
+    """Initialize on startup WITH VALIDATION"""
     global translator
     
-    logger.info("🚀 Starting API v2...")
+    logger.info("🚀 Starting API...")
+    logger.info(f"Environment: {ENVIRONMENT}")
     
-    # Create logs directory
+    # Validate environment in production
+    if IS_PRODUCTION:
+        if not os.getenv("JWT_SECRET_KEY"):
+            logger.critical("⚠️  SECURITY WARNING: JWT_SECRET_KEY not set in production!")
+    
+    # Create required directories
     os.makedirs("logs", exist_ok=True)
     os.makedirs("outputs", exist_ok=True)
     
@@ -147,19 +216,36 @@ async def shutdown_event():
     """Cleanup on shutdown"""
     global translator
     
-    logger.info("🛑 Shutting down API v2...")
+    logger.info("🛑 Shutting down API...")
     
     if translator:
         await translator.cleanup()
     
-    logger.info("✅ API v2 shutdown complete")
+    logger.info("✅ API shutdown complete")
 
 
-# Middleware to track active requests
+# =============================================================================
+# MIDDLEWARE
+# =============================================================================
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add unique request ID for tracing"""
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request_id_var.set(request_id)
+    
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+    except Exception as e:
+        logger.error(f"Request {request_id} failed: {e}")
+        raise
+
+
 @app.middleware("http")
 async def track_requests(request: Request, call_next):
     """Track active requests for rate limiting"""
-    # Increment active requests counter
     if cache_manager.enabled:
         try:
             cache_manager.redis_client.incr("active_requests")
@@ -170,7 +256,6 @@ async def track_requests(request: Request, call_next):
         response = await call_next(request)
         return response
     finally:
-        # Decrement on completion
         if cache_manager.enabled:
             try:
                 cache_manager.redis_client.decr("active_requests")
@@ -178,13 +263,18 @@ async def track_requests(request: Request, call_next):
                 pass
 
 
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
+
 @app.get("/", tags=["General"])
 async def root():
     """Root endpoint"""
     return {
-        "name": "Real-time Speech Translator API v2",
-        "version": "2.0.0",
+        "name": "Real-time Speech Translator API",
+        "version": API_VERSION,
         "status": "production",
+        "environment": ENVIRONMENT,
         "features": [
             "Authentication (API keys + JWT)",
             "Rate limiting (tier-based)",
@@ -194,7 +284,7 @@ async def root():
             "Caching",
             "Async processing",
             "Health monitoring",
-            "Security headers"
+            "Request tracing"
         ],
         "docs": "/docs",
         "health": "/health"
@@ -533,6 +623,44 @@ async def get_supported_languages():
             "ara_Arab", "hin_Deva"
         ]
     }
+
+
+# =============================================================================
+# DEVELOPMENT ENDPOINTS
+# =============================================================================
+
+@app.post("/dev/create-api-key", tags=["Development"])
+async def create_dev_api_key(tier: str = "pro"):
+    """
+    Create API key for development/testing ONLY
+    
+    ⚠️ This endpoint is DISABLED in production!
+    """
+    if ENVIRONMENT not in ["development", "testing"]:
+        raise HTTPException(
+            status_code=403,
+            detail="This endpoint is only available in development/testing mode"
+        )
+    
+    try:
+        # Generate key
+        user_id = f"dev_user_{uuid.uuid4().hex[:8]}"
+        test_key = APIKeyManager.generate_api_key(user_id, tier)
+        limits = get_rate_limit(tier)
+        
+        return {
+            "api_key": test_key,
+            "user_id": user_id,
+            "tier": tier,
+            "rate_limits": limits,
+            "warning": "⚠️ This is a DEVELOPMENT key. Do not use in production!",
+            "usage": f'curl -H "X-API-Key: {test_key}" http://localhost:8000/translate/text',
+            "created_at": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error creating dev API key: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
