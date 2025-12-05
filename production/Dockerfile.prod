@@ -2,26 +2,27 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (including gcc for any native extensions)
 RUN apt-get update && apt-get install -y \
     portaudio19-dev \
     ffmpeg \
     git \
     curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Copy requirements from production folder
+COPY production/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy production code
-COPY api.py .
-COPY scalability/ ./scalability/
-COPY security/ ./security/
-COPY monitoring/ ./monitoring/
-COPY reliability/ ./reliability/
+COPY production/api.py .
+COPY production/scalability/ ./scalability/
+COPY production/security/ ./security/
+COPY production/monitoring/ ./monitoring/
+COPY production/reliability/ ./reliability/
 
 # Create directories
 RUN mkdir -p /app/logs /root/.cache/whisper /root/.cache/huggingface
