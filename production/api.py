@@ -61,8 +61,29 @@ from monitoring.prometheus_metrics import MetricsHelper, metrics_app, PROMETHEUS
 
 # Configure logging with rotation
 from logging.handlers import RotatingFileHandler
+from urllib.parse import urlparse
 
 os.makedirs("logs", exist_ok=True)
+
+# =============================================================================
+# RAILWAY DEPLOYMENT FIX: Parse REDIS_URL
+# =============================================================================
+def configure_redis_from_railway():
+    """Railway provides REDIS_URL, but we need REDIS_HOST/PORT"""
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url and not os.getenv("REDIS_HOST"):
+        try:
+            parsed = urlparse(redis_url)
+            os.environ["REDIS_HOST"] = parsed.hostname or "localhost"
+            os.environ["REDIS_PORT"] = str(parsed.port or 6379)
+            if parsed.password:
+                os.environ["REDIS_PASSWORD"] = parsed.password
+            print(f"✅ Configured Redis from REDIS_URL: {parsed.hostname}:{parsed.port}")
+        except Exception as e:
+            print(f"❌ Failed to parse REDIS_URL: {e}")
+
+# Call immediately before any Redis imports
+configure_redis_from_railway()
 
 # Environment detection
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")

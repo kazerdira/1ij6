@@ -1,0 +1,68 @@
+# Railway Ignore File
+# Don't upload these to Railway (saves time and space)
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+tests/
+pytest.ini
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Logs (will be regenerated)
+logs/
+*.log
+
+# Temporary files
+outputs/
+temp/
+tmp/
+
+# Docker files (not needed in Railway)
+docker-compose*.yml
+Dockerfile
+!Dockerfile.prod
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Development scripts
+start-local.bat
+start-local.sh
+
+# Monitoring configs (Railway has built-in monitoring)
+monitoring/prometheus.yml
+monitoring/grafana/

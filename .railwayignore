@@ -1,0 +1,87 @@
+# Railway Ignore File
+# Don't upload these to Railway (saves time and space)
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+production/tests/
+pytest.ini
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Documentation (except README)
+rectif/
+rectif_v2/
+rectif_v3/
+rectif_v4/
+docs/
+LAUNCH_STRATEGY.md
+UPGRADE_SUMMARY.md
+EXAMPLES.md
+QUICK_START_GUIDE.md
+
+# Logs (will be regenerated)
+logs/
+*.log
+
+# Temporary files
+outputs/
+temp/
+tmp/
+
+# Docker files (not needed in Railway - using Dockerfile.prod)
+docker-compose*.yml
+Dockerfile
+production/docker-compose*.yml
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+ci-cd.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Development scripts
+*.bat
+*.sh
+
+# Monitoring configs (Railway has built-in monitoring)
+production/monitoring/prometheus.yml
+production/monitoring/grafana/
+
+# Non-production code (we only need production/)
+batch_processor.py
+config_validator.py
+export_utils.py
+gui_translator.py
+realtime_translator.py
+realtime_translator_enhanced.py
+rest_api.py
+test_translator.py
+vad_translator.py
+config.ini

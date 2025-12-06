@@ -3,7 +3,7 @@ dockerfilePath = "production/Dockerfile.prod"
 watchPatterns = ["production/**"]
 
 [deploy]
-healthcheckPath = "/health"
+healthcheckPath = "/health/simple"
 healthcheckTimeout = 300
 startCommand = "uvicorn api:app --host 0.0.0.0 --port $PORT --workers 1"
 restartPolicyType = "ON_FAILURE"
