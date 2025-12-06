@@ -36,20 +36,43 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 
+# =============================================================================
+# RAILWAY DEPLOYMENT FIX: Parse REDIS_URL before connecting
+# =============================================================================
+def configure_redis_from_url():
+    """Railway provides REDIS_URL, parse it to REDIS_HOST/PORT"""
+    from urllib.parse import urlparse
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url and not os.getenv("REDIS_HOST"):
+        try:
+            parsed = urlparse(redis_url)
+            os.environ["REDIS_HOST"] = parsed.hostname or "localhost"
+            os.environ["REDIS_PORT"] = str(parsed.port or 6379)
+            if parsed.password:
+                os.environ["REDIS_PASSWORD"] = parsed.password
+            print(f"✅ Auth: Configured Redis from REDIS_URL: {parsed.hostname}:{parsed.port}")
+        except Exception as e:
+            print(f"❌ Auth: Failed to parse REDIS_URL: {e}")
+
+# Parse REDIS_URL before connecting
+configure_redis_from_url()
+
 # Redis for API key storage - with graceful fallback
 try:
     redis_client = redis.Redis(
         host=os.getenv("REDIS_HOST", "localhost"),
         port=int(os.getenv("REDIS_PORT", 6379)),
+        password=os.getenv("REDIS_PASSWORD"),
         decode_responses=True,
         socket_connect_timeout=5
     )
     redis_client.ping()
     REDIS_AVAILABLE = True
-except:
+    print(f"✅ Redis connected: {os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}")
+except Exception as e:
     redis_client = None
     REDIS_AVAILABLE = False
-    print("⚠️  Redis not available. API key storage will not work.")
+    print(f"⚠️  Redis not available: {e}")
 
 # Security schemes
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
