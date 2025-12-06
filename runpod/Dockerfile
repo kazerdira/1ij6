@@ -16,15 +16,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy handler
 COPY handler.py .
 
-# Pre-download models (baked into image for fast cold starts)
+# Pre-download Whisper model only (smaller, fits in build)
 RUN python -c "import whisper; whisper.load_model('base')"
-RUN python -c "from transformers import AutoTokenizer, AutoModelForSeq2SeqLM; \
-    AutoTokenizer.from_pretrained('facebook/nllb-200-distilled-600M'); \
-    AutoModelForSeq2SeqLM.from_pretrained('facebook/nllb-200-distilled-600M')"
+
+# NLLB model will be downloaded on first request (too large for build)
+# This adds ~30s to first cold start but ensures reliable builds
 
 # Set environment variables
 ENV WHISPER_MODEL=base
 ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/app/models
+ENV TRANSFORMERS_CACHE=/app/models
 
 # Start handler
 CMD ["python", "-u", "handler.py"]
