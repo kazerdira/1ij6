@@ -659,7 +659,11 @@ async def translate_text_endpoint(
     
     # Translate
     try:
-        translated = await translator.translate_text(translation_request.text)
+        translated = await translator.translate_text(
+            translation_request.text,
+            source_language=translation_request.source_language,
+            target_language=translation_request.target_language
+        )
         
         # Cache result
         translation_cache.set_translation(

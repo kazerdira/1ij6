@@ -193,12 +193,14 @@ class AsyncRealtimeTranslator:
         return transcribed_text
     
     @async_circuit_breaker(failure_threshold=5, recovery_timeout=60, name="nllb_translate")
-    async def translate_text(self, text: str) -> str:
+    async def translate_text(self, text: str, source_language: str = None, target_language: str = None) -> str:
         """
         Translate text asynchronously WITH CIRCUIT BREAKER
         
         Args:
             text: Text to translate
+            source_language: Source language code (optional, uses default if not provided)
+            target_language: Target language code (optional, uses default if not provided)
         
         Returns:
             Translated text
@@ -207,6 +209,10 @@ class AsyncRealtimeTranslator:
         
         if not text:
             return ""
+        
+        # Use provided languages or fall back to defaults
+        src_lang = source_language or self.source_language
+        tgt_lang = target_language or self.target_language
         
         loop = asyncio.get_event_loop()
         
@@ -224,7 +230,7 @@ class AsyncRealtimeTranslator:
                     inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 
                 target_lang_id = self.translator_tokenizer.convert_tokens_to_ids(
-                    self.target_language
+                    tgt_lang
                 )
                 
                 with torch.no_grad():
