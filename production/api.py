@@ -926,8 +926,61 @@ async def get_quota_tiers():
 
 
 # =============================================================================
-# DEVELOPMENT ENDPOINTS
+# BOOTSTRAP & DEVELOPMENT ENDPOINTS
 # =============================================================================
+
+@app.post("/auth/bootstrap", tags=["Authentication"])
+async def bootstrap_admin_key(
+    bootstrap_secret: str,
+    user_id: str = "admin"
+):
+    """
+    Create initial admin API key using bootstrap secret.
+    
+    **One-time setup for production!**
+    
+    The bootstrap_secret must match JWT_SECRET_KEY environment variable.
+    This allows secure creation of the first admin key without requiring
+    an existing admin key.
+    
+    After creating your admin key, you can use /auth/api-key for additional keys.
+    """
+    # Verify bootstrap secret matches JWT_SECRET_KEY
+    jwt_secret = os.getenv("JWT_SECRET_KEY", "")
+    
+    if not jwt_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="JWT_SECRET_KEY not configured on server"
+        )
+    
+    if bootstrap_secret != jwt_secret:
+        logger.warning(f"Bootstrap attempt with invalid secret from user_id: {user_id}")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid bootstrap secret"
+        )
+    
+    try:
+        # Create admin API key
+        api_key = APIKeyManager.generate_api_key(user_id, "admin")
+        limits = get_rate_limit("admin")
+        
+        logger.info(f"✅ Bootstrap admin key created for user: {user_id}")
+        
+        return {
+            "api_key": api_key,
+            "user_id": user_id,
+            "tier": "admin",
+            "rate_limits": limits,
+            "warning": "⚠️ SAVE THIS KEY IMMEDIATELY! It will not be shown again.",
+            "note": "You can now use /auth/api-key with this admin key to create more keys.",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Bootstrap error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/dev/create-api-key", tags=["Development"])
 async def create_dev_api_key(tier: str = "pro"):
