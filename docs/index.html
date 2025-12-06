@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Fast, affordable Translation API. 200+ languages, speech-to-text, GPU-accelerated. Built for developers.">
+    <meta name="keywords" content="translation api, speech to text, whisper, nllb, developer api, multilingual">
+    <meta name="author" content="TranslateAPI">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="TranslateAPI - Fast Translation API for Developers">
+    <meta property="og:description" content="200+ languages. Speech-to-text included. GPU-accelerated. Simple pricing.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://kazerdira.github.io/1ij6/">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="TranslateAPI - Fast Translation API">
+    <meta name="twitter:description" content="200+ languages. Speech-to-text. GPU-accelerated.">
+    
+    <title>TranslateAPI - Fast Translation API for Developers</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-primary: #0a0a0b;
+            --bg-secondary: #111113;
+            --bg-tertiary: #1a1a1d;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --border: #27272a;
+            --code-bg: #18181b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 11, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-cta {
+            background: var(--accent);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .nav-cta:hover {
+            background: var(--accent-hover);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 10rem 2rem 6rem;
+            text-align: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            padding: 0.4rem 1rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+        }
+
+        .badge-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 2.5rem;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            padding: 0.875rem 1.75rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-primary);
+            padding: 0.875rem 1.75rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--text-muted);
+        }
+
+        /* Stats */
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 4rem;
+            margin-top: 4rem;
+            padding-top: 4rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 6rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-header h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .feature-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* Code Demo Section */
+        .demo {
+            padding: 6rem 2rem;
+            background: var(--bg-secondary);
+        }
+
+        .demo-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .code-block {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-top: 2rem;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .code-tabs {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .code-tab {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .code-tab.active {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .code-content {
+            padding: 1.5rem;
+            overflow-x: auto;
+        }
+
+        .code-content pre {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+
+        .code-content .comment { color: var(--text-muted); }
+        .code-content .string { color: #22c55e; }
+        .code-content .keyword { color: #f472b6; }
+        .code-content .function { color: #60a5fa; }
+        .code-content .property { color: #c084fc; }
+
+        /* Pricing Section */
+        .pricing {
+            padding: 6rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 3rem;
+        }
+
+        .pricing-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            position: relative;
+        }
+
+        .pricing-card.featured {
+            border-color: var(--accent);
+        }
+
+        .pricing-card.featured::before {
+            content: 'Most Popular';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: white;
+            padding: 0.25rem 1rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .pricing-tier {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-price {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-price span {
+            font-size: 1rem;
+            font-weight: 400;
+            color: var(--text-muted);
+        }
+
+        .pricing-desc {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pricing-features {
+            list-style: none;
+            margin-bottom: 2rem;
+        }
+
+        .pricing-features li {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .pricing-features li::before {
+            content: '✓';
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .pricing-btn {
+            display: block;
+            width: 100%;
+            text-align: center;
+            padding: 0.875rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .pricing-card.featured .pricing-btn {
+            background: var(--accent);
+            color: white;
+        }
+
+        .pricing-card.featured .pricing-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .pricing-card:not(.featured) .pricing-btn {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .pricing-card:not(.featured) .pricing-btn:hover {
+            background: var(--bg-primary);
+        }
+
+        /* Languages Section */
+        .languages {
+            padding: 6rem 2rem;
+            background: var(--bg-secondary);
+            text-align: center;
+        }
+
+        .lang-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.75rem;
+            max-width: 800px;
+            margin: 2rem auto 0;
+        }
+
+        .lang-tag {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* CTA Section */
+        .cta {
+            padding: 8rem 2rem;
+            text-align: center;
+        }
+
+        .cta h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .cta p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Footer */
+        footer {
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: var(--text-primary);
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .stats {
+                flex-direction: column;
+                gap: 2rem;
+            }
+
+            .hero {
+                padding: 8rem 1.5rem 4rem;
+            }
+
+            .features, .pricing, .demo {
+                padding: 4rem 1.5rem;
+            }
+        }
+
+        /* Animations */
+        @media (prefers-reduced-motion: no-preference) {
+            .feature-card, .pricing-card {
+                opacity: 0;
+                transform: translateY(20px);
+                animation: fadeInUp 0.5s ease forwards;
+            }
+
+            @keyframes fadeInUp {
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .feature-card:nth-child(1) { animation-delay: 0.1s; }
+            .feature-card:nth-child(2) { animation-delay: 0.2s; }
+            .feature-card:nth-child(3) { animation-delay: 0.3s; }
+            .feature-card:nth-child(4) { animation-delay: 0.4s; }
+            .feature-card:nth-child(5) { animation-delay: 0.5s; }
+            .feature-card:nth-child(6) { animation-delay: 0.6s; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <a href="#" class="logo">🌐 TranslateAPI</a>
+            <ul class="nav-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#demo">API</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="docs.html">Docs</a></li>
+            </ul>
+            <a href="#pricing" class="nav-cta">Get Started</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="badge">
+            <span class="badge-dot"></span>
+            GPU-Accelerated • 200ms Response
+        </div>
+        <h1>Translation API <br><span class="gradient-text">Built for Developers</span></h1>
+        <p class="hero-subtitle">
+            Fast, reliable translation API with speech-to-text. 
+            200+ languages. Simple pricing. No complex setup.
+        </p>
+        <div class="hero-buttons">
+            <a href="#pricing" class="btn-primary">
+                Get API Access →
+            </a>
+            <a href="#demo" class="btn-secondary">
+                View Documentation
+            </a>
+        </div>
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">200+</div>
+                <div class="stat-label">Languages</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">~200ms</div>
+                <div class="stat-label">Response Time</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">99.9%</div>
+                <div class="stat-label">Uptime</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="section-header">
+            <h2>Everything You Need</h2>
+            <p>Production-ready translation infrastructure</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>GPU-Accelerated</h3>
+                <p>Running on NVIDIA RTX 4090 GPUs for blazing fast inference. ~200ms translation times.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎙️</div>
+                <h3>Speech-to-Text</h3>
+                <p>Transcribe audio files directly. Powered by OpenAI's Whisper model for accurate results.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🌍</div>
+                <h3>200+ Languages</h3>
+                <p>Support for over 200 languages using Meta's NLLB-200 model. From Arabic to Zulu.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔒</div>
+                <h3>Secure & Private</h3>
+                <p>Your data is never stored. All processing happens in isolated environments.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Simple Pricing</h3>
+                <p>Pay only for what you use. No hidden fees, no surprise bills. Start free.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🛠️</div>
+                <h3>Developer Friendly</h3>
+                <p>Clean REST API. Works with any language. Detailed documentation and examples.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Code Demo Section -->
+    <section class="demo" id="demo">
+        <div class="demo-container">
+            <div class="section-header">
+                <h2>Simple Integration</h2>
+                <p>Get started with just a few lines of code</p>
+            </div>
+            <div class="code-block">
+                <div class="code-header">
+                    <div class="code-tabs">
+                        <button class="code-tab active" data-lang="curl">cURL</button>
+                        <button class="code-tab" data-lang="python">Python</button>
+                        <button class="code-tab" data-lang="javascript">JavaScript</button>
+                    </div>
+                    <button class="copy-btn" onclick="copyCode()">Copy</button>
+                </div>
+                <div class="code-content">
+                    <pre id="code-curl"><span class="comment"># Translate text from English to French</span>
+curl -X POST <span class="string">"https://api.translateapi.dev/v1/translate"</span> \
+  -H <span class="string">"Authorization: Bearer YOUR_API_KEY"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{
+    "text": "Hello, how are you?",
+    "source_lang": "eng_Latn",
+    "target_lang": "fra_Latn"
+  }'</span>
+
+<span class="comment"># Response</span>
+{
+  <span class="property">"translated_text"</span>: <span class="string">"Bonjour, comment allez-vous?"</span>,
+  <span class="property">"source_lang"</span>: <span class="string">"eng_Latn"</span>,
+  <span class="property">"target_lang"</span>: <span class="string">"fra_Latn"</span>,
+  <span class="property">"processing_time_ms"</span>: <span class="string">187</span>
+}</pre>
+                    <pre id="code-python" style="display:none;"><span class="keyword">import</span> requests
+
+<span class="comment"># Translate text</span>
+response = requests.<span class="function">post</span>(
+    <span class="string">"https://api.translateapi.dev/v1/translate"</span>,
+    headers={
+        <span class="string">"Authorization"</span>: <span class="string">"Bearer YOUR_API_KEY"</span>,
+        <span class="string">"Content-Type"</span>: <span class="string">"application/json"</span>
+    },
+    json={
+        <span class="string">"text"</span>: <span class="string">"Hello, how are you?"</span>,
+        <span class="string">"source_lang"</span>: <span class="string">"eng_Latn"</span>,
+        <span class="string">"target_lang"</span>: <span class="string">"fra_Latn"</span>
+    }
+)
+
+result = response.<span class="function">json</span>()
+<span class="function">print</span>(result[<span class="string">"translated_text"</span>])
+<span class="comment"># Output: Bonjour, comment allez-vous?</span></pre>
+                    <pre id="code-javascript" style="display:none;"><span class="comment">// Translate text</span>
+<span class="keyword">const</span> response = <span class="keyword">await</span> <span class="function">fetch</span>(<span class="string">"https://api.translateapi.dev/v1/translate"</span>, {
+  method: <span class="string">"POST"</span>,
+  headers: {
+    <span class="string">"Authorization"</span>: <span class="string">"Bearer YOUR_API_KEY"</span>,
+    <span class="string">"Content-Type"</span>: <span class="string">"application/json"</span>
+  },
+  body: <span class="function">JSON.stringify</span>({
+    text: <span class="string">"Hello, how are you?"</span>,
+    source_lang: <span class="string">"eng_Latn"</span>,
+    target_lang: <span class="string">"fra_Latn"</span>
+  })
+});
+
+<span class="keyword">const</span> result = <span class="keyword">await</span> response.<span class="function">json</span>();
+console.<span class="function">log</span>(result.translated_text);
+<span class="comment">// Output: Bonjour, comment allez-vous?</span></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing" id="pricing">
+        <div class="section-header">
+            <h2>Simple, Transparent Pricing</h2>
+            <p>Start free, scale as you grow</p>
+        </div>
+        <div class="pricing-grid">
+            <div class="pricing-card">
+                <div class="pricing-tier">Free</div>
+                <div class="pricing-price">$0<span>/month</span></div>
+                <div class="pricing-desc">Perfect for testing and small projects</div>
+                <ul class="pricing-features">
+                    <li>1,000 requests/month</li>
+                    <li>Text translation</li>
+                    <li>200+ languages</li>
+                    <li>Community support</li>
+                </ul>
+                <a href="https://forms.gle/YOUR_FORM_ID" class="pricing-btn" target="_blank">Get Started Free</a>
+            </div>
+            <div class="pricing-card featured">
+                <div class="pricing-tier">Pro</div>
+                <div class="pricing-price">$29<span>/month</span></div>
+                <div class="pricing-desc">For growing applications</div>
+                <ul class="pricing-features">
+                    <li>50,000 requests/month</li>
+                    <li>Text + Audio translation</li>
+                    <li>200+ languages</li>
+                    <li>Priority support</li>
+                    <li>Faster response times</li>
+                </ul>
+                <a href="https://forms.gle/YOUR_FORM_ID" class="pricing-btn" target="_blank">Get Pro Access</a>
+            </div>
+            <div class="pricing-card">
+                <div class="pricing-tier">Enterprise</div>
+                <div class="pricing-price">$99<span>/month</span></div>
+                <div class="pricing-desc">For high-volume needs</div>
+                <ul class="pricing-features">
+                    <li>200,000 requests/month</li>
+                    <li>Text + Audio translation</li>
+                    <li>200+ languages</li>
+                    <li>Dedicated support</li>
+                    <li>SLA guarantee</li>
+                    <li>Custom integration help</li>
+                </ul>
+                <a href="https://forms.gle/YOUR_FORM_ID" class="pricing-btn" target="_blank">Contact Us</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Languages Section -->
+    <section class="languages">
+        <div class="section-header">
+            <h2>200+ Languages Supported</h2>
+            <p>Powered by Meta's NLLB-200 model</p>
+        </div>
+        <div class="lang-grid">
+            <span class="lang-tag">English</span>
+            <span class="lang-tag">Spanish</span>
+            <span class="lang-tag">French</span>
+            <span class="lang-tag">German</span>
+            <span class="lang-tag">Italian</span>
+            <span class="lang-tag">Portuguese</span>
+            <span class="lang-tag">Chinese</span>
+            <span class="lang-tag">Japanese</span>
+            <span class="lang-tag">Korean</span>
+            <span class="lang-tag">Arabic</span>
+            <span class="lang-tag">Hindi</span>
+            <span class="lang-tag">Russian</span>
+            <span class="lang-tag">Dutch</span>
+            <span class="lang-tag">Polish</span>
+            <span class="lang-tag">Turkish</span>
+            <span class="lang-tag">Vietnamese</span>
+            <span class="lang-tag">Thai</span>
+            <span class="lang-tag">Indonesian</span>
+            <span class="lang-tag">+ 180 more</span>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <h2>Ready to Get Started?</h2>
+        <p>Start translating in minutes. No credit card required.</p>
+        <a href="https://forms.gle/YOUR_FORM_ID" class="btn-primary" target="_blank">
+            Request API Access →
+        </a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <p>
+            © 2025 TranslateAPI. Built with ❤️ for developers.
+            <br>
+            <a href="docs.html">Documentation</a> · 
+            <a href="mailto:your-email@example.com">Contact</a> · 
+            <a href="https://github.com/kazerdira/1ij6">GitHub</a>
+        </p>
+    </footer>
+
+    <script>
+        // Tab switching for code examples
+        document.querySelectorAll('.code-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                const lang = tab.dataset.lang;
+                document.querySelectorAll('.code-content pre').forEach(pre => {
+                    pre.style.display = 'none';
+                });
+                document.getElementById('code-' + lang).style.display = 'block';
+            });
+        });
+
+        // Copy code functionality
+        function copyCode() {
+            const activeTab = document.querySelector('.code-tab.active');
+            const lang = activeTab.dataset.lang;
+            const code = document.getElementById('code-' + lang).textContent;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                }, 2000);
+            });
+        }
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

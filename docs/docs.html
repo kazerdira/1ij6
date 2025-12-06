@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TranslateAPI Documentation - Complete guide to integrating our translation API">
+    <title>API Documentation - TranslateAPI</title>
+    
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-primary: #0a0a0b;
+            --bg-secondary: #111113;
+            --bg-tertiary: #1a1a1d;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --border: #27272a;
+            --code-bg: #18181b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Layout */
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 2rem 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .sidebar-logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 0 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .sidebar-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .sidebar-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar-link {
+            display: block;
+            padding: 0.5rem 1.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            border-left: 2px solid transparent;
+        }
+
+        .sidebar-link:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .sidebar-link.active {
+            color: var(--accent);
+            border-left-color: var(--accent);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            margin-left: 280px;
+            padding: 3rem 4rem;
+            max-width: 900px;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--text-primary);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        h2 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-top: 3rem;
+            margin-bottom: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        /* Code blocks */
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+        }
+
+        :not(pre) > code {
+            background: var(--bg-tertiary);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            color: var(--accent);
+        }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin: 1rem 0 1.5rem;
+        }
+
+        pre code {
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Endpoint cards */
+        .endpoint {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            overflow: hidden;
+        }
+
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        .method {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .method-post { background: #22c55e20; color: #22c55e; }
+        .method-get { background: #3b82f620; color: #3b82f6; }
+
+        .endpoint-path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .endpoint-body {
+            padding: 1.25rem;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            font-weight: 600;
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        td {
+            color: var(--text-secondary);
+        }
+
+        td code {
+            font-size: 0.8rem;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .alert-info {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .alert-icon {
+            font-size: 1.25rem;
+        }
+
+        .alert-content p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+
+        /* Language codes table */
+        .lang-table {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .lang-table table {
+            margin: 0;
+        }
+
+        /* Mobile */
+        @media (max-width: 1024px) {
+            .sidebar {
+                display: none;
+            }
+            .main {
+                margin-left: 0;
+                padding: 2rem 1.5rem;
+            }
+        }
+
+        /* Syntax highlighting */
+        .string { color: #22c55e; }
+        .number { color: #f59e0b; }
+        .keyword { color: #f472b6; }
+        .comment { color: var(--text-muted); }
+        .property { color: #c084fc; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <a href="index.html" class="sidebar-logo">🌐 TranslateAPI</a>
+            
+            <div class="sidebar-section">
+                <div class="sidebar-title">Getting Started</div>
+                <a href="#overview" class="sidebar-link active">Overview</a>
+                <a href="#authentication" class="sidebar-link">Authentication</a>
+                <a href="#quickstart" class="sidebar-link">Quick Start</a>
+            </div>
+            
+            <div class="sidebar-section">
+                <div class="sidebar-title">API Reference</div>
+                <a href="#translate-text" class="sidebar-link">Translate Text</a>
+                <a href="#translate-audio" class="sidebar-link">Translate Audio</a>
+                <a href="#transcribe" class="sidebar-link">Transcribe Only</a>
+                <a href="#health" class="sidebar-link">Health Check</a>
+            </div>
+            
+            <div class="sidebar-section">
+                <div class="sidebar-title">Reference</div>
+                <a href="#languages" class="sidebar-link">Language Codes</a>
+                <a href="#errors" class="sidebar-link">Error Handling</a>
+                <a href="#limits" class="sidebar-link">Rate Limits</a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <a href="index.html" class="back-link">← Back to Home</a>
+            
+            <h1 id="overview">API Documentation</h1>
+            <p>
+                Welcome to the TranslateAPI documentation. This guide covers everything you need to integrate 
+                our translation API into your application.
+            </p>
+
+            <div class="alert alert-info">
+                <span class="alert-icon">💡</span>
+                <div class="alert-content">
+                    <p><strong>Base URL:</strong> All API requests should be made to <code>https://api.translateapi.dev/v1</code></p>
+                </div>
+            </div>
+
+            <!-- Authentication -->
+            <h2 id="authentication">Authentication</h2>
+            <p>
+                All API requests require authentication using a Bearer token. Include your API key in the 
+                <code>Authorization</code> header:
+            </p>
+            <pre><code>Authorization: Bearer YOUR_API_KEY</code></pre>
+            
+            <div class="alert alert-warning">
+                <span class="alert-icon">⚠️</span>
+                <div class="alert-content">
+                    <p>Keep your API key secret. Never expose it in client-side code or public repositories.</p>
+                </div>
+            </div>
+
+            <!-- Quick Start -->
+            <h2 id="quickstart">Quick Start</h2>
+            <p>Here's a complete example to translate text from English to French:</p>
+            
+            <pre><code><span class="comment"># Using cURL</span>
+curl -X POST <span class="string">"https://api.translateapi.dev/v1/translate"</span> \
+  -H <span class="string">"Authorization: Bearer YOUR_API_KEY"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{
+    "text": "Hello, how are you?",
+    "source_lang": "eng_Latn",
+    "target_lang": "fra_Latn"
+  }'</span></code></pre>
+
+            <p>Response:</p>
+            <pre><code>{
+  <span class="property">"translated_text"</span>: <span class="string">"Bonjour, comment allez-vous?"</span>,
+  <span class="property">"source_lang"</span>: <span class="string">"eng_Latn"</span>,
+  <span class="property">"target_lang"</span>: <span class="string">"fra_Latn"</span>,
+  <span class="property">"processing_time_ms"</span>: <span class="number">187</span>
+}</code></pre>
+
+            <!-- Translate Text -->
+            <h2 id="translate-text">Translate Text</h2>
+            <p>Translate text from one language to another.</p>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method method-post">POST</span>
+                    <span class="endpoint-path">/translate</span>
+                </div>
+                <div class="endpoint-body">
+                    <h3>Request Body</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Required</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>text</code></td>
+                                <td>string</td>
+                                <td>Yes</td>
+                                <td>Text to translate (max 5000 characters)</td>
+                            </tr>
+                            <tr>
+                                <td><code>source_lang</code></td>
+                                <td>string</td>
+                                <td>Yes</td>
+                                <td>Source language code (e.g., <code>eng_Latn</code>)</td>
+                            </tr>
+                            <tr>
+                                <td><code>target_lang</code></td>
+                                <td>string</td>
+                                <td>Yes</td>
+                                <td>Target language code (e.g., <code>fra_Latn</code>)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Example Request</h3>
+                    <pre><code>{
+  <span class="property">"text"</span>: <span class="string">"The quick brown fox jumps over the lazy dog."</span>,
+  <span class="property">"source_lang"</span>: <span class="string">"eng_Latn"</span>,
+  <span class="property">"target_lang"</span>: <span class="string">"spa_Latn"</span>
+}</code></pre>
+
+                    <h3>Example Response</h3>
+                    <pre><code>{
+  <span class="property">"translated_text"</span>: <span class="string">"El rápido zorro marrón salta sobre el perro perezoso."</span>,
+  <span class="property">"source_lang"</span>: <span class="string">"eng_Latn"</span>,
+  <span class="property">"target_lang"</span>: <span class="string">"spa_Latn"</span>,
+  <span class="property">"processing_time_ms"</span>: <span class="number">203</span>
+}</code></pre>
+                </div>
+            </div>
+
+            <!-- Translate Audio -->
+            <h2 id="translate-audio">Translate Audio</h2>
+            <p>Transcribe an audio file and translate the result to another language.</p>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method method-post">POST</span>
+                    <span class="endpoint-path">/transcribe</span>
+                </div>
+                <div class="endpoint-body">
+                    <h3>Request Body</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Required</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>audio_base64</code></td>
+                                <td>string</td>
+                                <td>Yes</td>
+                                <td>Base64-encoded audio data</td>
+                            </tr>
+                            <tr>
+                                <td><code>target_lang</code></td>
+                                <td>string</td>
+                                <td>Yes</td>
+                                <td>Target language code for translation</td>
+                            </tr>
+                            <tr>
+                                <td><code>source_lang</code></td>
+                                <td>string</td>
+                                <td>No</td>
+                                <td>Source language (auto-detected if not provided)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Supported Audio Formats</h3>
+                    <p>MP3, WAV, M4A, FLAC, OGG, WebM (max 25MB)</p>
+
+                    <h3>Example Response</h3>
+                    <pre><code>{
+  <span class="property">"transcription"</span>: <span class="string">"Hello, this is a test recording."</span>,
+  <span class="property">"translated_text"</span>: <span class="string">"Hola, esta es una grabación de prueba."</span>,
+  <span class="property">"detected_language"</span>: <span class="string">"en"</span>,
+  <span class="property">"target_lang"</span>: <span class="string">"spa_Latn"</span>,
+  <span class="property">"processing_time_ms"</span>: <span class="number">1542</span>
+}</code></pre>
+                </div>
+            </div>
+
+            <!-- Transcribe Only -->
+            <h2 id="transcribe">Transcribe Only</h2>
+            <p>Transcribe audio to text without translation.</p>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method method-post">POST</span>
+                    <span class="endpoint-path">/transcribe-only</span>
+                </div>
+                <div class="endpoint-body">
+                    <h3>Request Body</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Type</th>
+                                <th>Required</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>audio_base64</code></td>
+                                <td>string</td>
+                                <td>Yes</td>
+                                <td>Base64-encoded audio data</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Example Response</h3>
+                    <pre><code>{
+  <span class="property">"transcription"</span>: <span class="string">"Hello, this is a test recording."</span>,
+  <span class="property">"detected_language"</span>: <span class="string">"en"</span>,
+  <span class="property">"processing_time_ms"</span>: <span class="number">892</span>
+}</code></pre>
+                </div>
+            </div>
+
+            <!-- Health Check -->
+            <h2 id="health">Health Check</h2>
+            <p>Check if the API is running and get system status.</p>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method method-get">GET</span>
+                    <span class="endpoint-path">/health</span>
+                </div>
+                <div class="endpoint-body">
+                    <h3>Example Response</h3>
+                    <pre><code>{
+  <span class="property">"status"</span>: <span class="string">"healthy"</span>,
+  <span class="property">"gpu_available"</span>: <span class="keyword">true</span>,
+  <span class="property">"gpu_name"</span>: <span class="string">"NVIDIA GeForce RTX 4090"</span>,
+  <span class="property">"models_loaded"</span>: {
+    <span class="property">"whisper"</span>: <span class="keyword">true</span>,
+    <span class="property">"nllb"</span>: <span class="keyword">true</span>
+  }
+}</code></pre>
+                </div>
+            </div>
+
+            <!-- Language Codes -->
+            <h2 id="languages">Language Codes</h2>
+            <p>
+                We use NLLB-200 language codes in the format <code>xxx_Yyyy</code> where <code>xxx</code> is the 
+                ISO 639-3 language code and <code>Yyyy</code> is the script code.
+            </p>
+
+            <div class="lang-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Language</th>
+                            <th>Code</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>English</td><td><code>eng_Latn</code></td></tr>
+                        <tr><td>Spanish</td><td><code>spa_Latn</code></td></tr>
+                        <tr><td>French</td><td><code>fra_Latn</code></td></tr>
+                        <tr><td>German</td><td><code>deu_Latn</code></td></tr>
+                        <tr><td>Italian</td><td><code>ita_Latn</code></td></tr>
+                        <tr><td>Portuguese</td><td><code>por_Latn</code></td></tr>
+                        <tr><td>Dutch</td><td><code>nld_Latn</code></td></tr>
+                        <tr><td>Russian</td><td><code>rus_Cyrl</code></td></tr>
+                        <tr><td>Chinese (Simplified)</td><td><code>zho_Hans</code></td></tr>
+                        <tr><td>Chinese (Traditional)</td><td><code>zho_Hant</code></td></tr>
+                        <tr><td>Japanese</td><td><code>jpn_Jpan</code></td></tr>
+                        <tr><td>Korean</td><td><code>kor_Hang</code></td></tr>
+                        <tr><td>Arabic</td><td><code>arb_Arab</code></td></tr>
+                        <tr><td>Hindi</td><td><code>hin_Deva</code></td></tr>
+                        <tr><td>Turkish</td><td><code>tur_Latn</code></td></tr>
+                        <tr><td>Polish</td><td><code>pol_Latn</code></td></tr>
+                        <tr><td>Vietnamese</td><td><code>vie_Latn</code></td></tr>
+                        <tr><td>Thai</td><td><code>tha_Thai</code></td></tr>
+                        <tr><td>Indonesian</td><td><code>ind_Latn</code></td></tr>
+                        <tr><td>Swedish</td><td><code>swe_Latn</code></td></tr>
+                        <tr><td>Greek</td><td><code>ell_Grek</code></td></tr>
+                        <tr><td>Hebrew</td><td><code>heb_Hebr</code></td></tr>
+                        <tr><td>Czech</td><td><code>ces_Latn</code></td></tr>
+                        <tr><td>Romanian</td><td><code>ron_Latn</code></td></tr>
+                        <tr><td>Ukrainian</td><td><code>ukr_Cyrl</code></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+                See the <a href="https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200" target="_blank">complete list of 200+ languages</a>.
+            </p>
+
+            <!-- Error Handling -->
+            <h2 id="errors">Error Handling</h2>
+            <p>The API returns standard HTTP status codes and JSON error responses:</p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Status Code</th>
+                        <th>Meaning</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>200</code></td><td>Success</td></tr>
+                    <tr><td><code>400</code></td><td>Bad Request - Invalid parameters</td></tr>
+                    <tr><td><code>401</code></td><td>Unauthorized - Invalid or missing API key</td></tr>
+                    <tr><td><code>429</code></td><td>Rate Limited - Too many requests</td></tr>
+                    <tr><td><code>500</code></td><td>Server Error - Something went wrong</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Error Response Format</h3>
+            <pre><code>{
+  <span class="property">"error"</span>: {
+    <span class="property">"code"</span>: <span class="string">"INVALID_LANGUAGE"</span>,
+    <span class="property">"message"</span>: <span class="string">"Unsupported language code: xyz_Latn"</span>
+  }
+}</code></pre>
+
+            <!-- Rate Limits -->
+            <h2 id="limits">Rate Limits</h2>
+            <p>Rate limits depend on your subscription tier:</p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tier</th>
+                        <th>Requests/Month</th>
+                        <th>Requests/Minute</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Free</td><td>1,000</td><td>10</td></tr>
+                    <tr><td>Pro</td><td>50,000</td><td>60</td></tr>
+                    <tr><td>Enterprise</td><td>200,000</td><td>200</td></tr>
+                </tbody>
+            </table>
+
+            <p style="margin-top: 2rem; color: var(--text-muted);">
+                Questions? Contact us at <a href="mailto:support@translateapi.dev">support@translateapi.dev</a>
+            </p>
+        </main>
+    </div>
+
+    <script>
+        // Highlight active section on scroll
+        const sections = document.querySelectorAll('h2[id]');
+        const navLinks = document.querySelectorAll('.sidebar-link');
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (scrollY >= sectionTop - 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
