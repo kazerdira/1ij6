@@ -27,10 +27,9 @@ COPY production/reliability/ ./reliability/
 # Create directories
 RUN mkdir -p /app/logs /root/.cache/whisper /root/.cache/huggingface
 
-# Default port (Railway overrides with $PORT)
+# Default port (Railway overrides with PORT env var)
 ENV PORT=8000
-EXPOSE $PORT
+EXPOSE 8000
 
-# Remove Docker healthcheck - Railway handles this
-# Start command - Railway overrides via railway.toml
-CMD uvicorn api:app --host 0.0.0.0 --port $PORT --workers 1
+# Start command using shell form to expand $PORT
+CMD ["/bin/sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

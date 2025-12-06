@@ -434,9 +434,31 @@ async def health_check():
     """
     Comprehensive health check
     
-    Returns system health, model status, and resource usage
+    Returns system health, model status, and resource usage.
+    Reports 'degraded' if models not yet loaded (lazy loading).
     """
-    return await health_monitor.run_all_checks_async()
+    base_health = await health_monitor.run_all_checks_async()
+    
+    # Add model status for lazy loading
+    models_status = {
+        "name": "model_status",
+        "status": "healthy" if translator is not None else "degraded",
+        "details": {
+            "models_loaded": translator is not None,
+            "lazy_loading": translator is None,
+            "message": "Models loaded" if translator else "Models will load on first request"
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Add to checks
+    base_health["checks"].append(models_status)
+    
+    # Update overall status if models not loaded
+    if translator is None and base_health["overall_status"] == "healthy":
+        base_health["overall_status"] = "degraded"
+    
+    return base_health
 
 
 @app.get("/health/simple", tags=["Monitoring"])
