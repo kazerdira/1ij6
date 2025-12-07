@@ -138,8 +138,8 @@ export async function POST(request: NextRequest) {
         input: {
           action: 'translate',
           text,
-          source_lang,
-          target_lang,
+          source_language: source_lang,
+          target_language: target_lang,
         },
       }),
     })
